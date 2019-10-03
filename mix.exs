@@ -7,14 +7,6 @@ defmodule FileConfigRocksdb.MixProject do
       version: "0.1.0",
       elixir: "~> 1.8",
       start_permanent: Mix.env() == :prod,
-      dialyzer: [
-        # plt_add_deps: :project,
-        # plt_add_apps: [:ssl, :mnesia, :compiler, :xmerl, :inets, :disk_log],
-        plt_add_deps: true,
-        # flags: ["-Werror_handling", "-Wrace_conditions"],
-        # flags: ["-Wunmatched_returns", :error_handling, :race_conditions, :underspecs],
-        # ignore_warnings: "dialyzer.ignore-warnings"
-      ],
       deps: deps()
     ]
   end
@@ -29,7 +21,6 @@ defmodule FileConfigRocksdb.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:dialyxir, "~> 0.5.1", only: [:dev, :test], runtime: false},
       {:exlager, github: "khia/exlager"},
       {:lager, "~> 3.6", override: true},
       {:nimble_csv, "~> 0.3"},
