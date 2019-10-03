@@ -1,6 +1,6 @@
 defmodule FileConfigRocksdb.Handler.Csv do
   @moduledoc "Handler for CSV files with RocksDB backend"
-  @app :file_config
+  @app :file_config_rocksdb
 
   NimbleCSV.define(FileConfigRocksdb.Handler.Csv.Parser, separator: "\t", escape: "\0")
 
@@ -111,7 +111,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
   # @doc "Get path to db for name"
   @spec db_path(atom) :: Path.t
   defp db_path(name) do
-    state_dir = Application.get_env(@app, :state_dir)
+    state_dir = Application.get_env(@app, :state_dir, "/var/lib/file_config")
     Path.join(state_dir, to_string(name))
   end
 
