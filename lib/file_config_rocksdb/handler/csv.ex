@@ -6,7 +6,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
 
   alias FileConfigRocksdb.Handler.Csv.Parser
 
-  require Lager
+  require Logger
 
   alias FileConfig.Loader
 
@@ -33,7 +33,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
             true = :ets.insert(tid, [{key, :undefined}])
             :undefined
           error ->
-            Lager.warning("Error reading from rocksdb #{name} #{key}: #{inspect error}")
+            Logger.warning("Error reading from rocksdb #{name} #{key}: #{inspect error}")
             :undefined
         end
         :ok = :rocksdb.close(db)
@@ -52,11 +52,11 @@ defmodule FileConfigRocksdb.Handler.Csv do
     chunk_size = config[:chunk_size] || 100
 
     if update_db?(db_path, update.mod) do
-      Lager.debug("Loading #{name} rocksdb #{path} #{db_path}")
+      Logger.debug("Loading #{name} rocksdb #{path} #{db_path}")
       {time, {:ok, rec}} = :timer.tc(&parse_file/3, [path, db_path, chunk_size])
-      Lager.notice("Loaded #{name} rocksdb #{path} #{rec} rec #{time / 1_000_000} sec")
+      Logger.notice("Loaded #{name} rocksdb #{path} #{rec} rec #{time / 1_000_000} sec")
     else
-      Lager.notice("Loaded #{name} rocksdb #{db_path} up to date")
+      Logger.notice("Loaded #{name} rocksdb #{db_path} up to date")
     end
 
     %{
@@ -101,8 +101,8 @@ defmodule FileConfigRocksdb.Handler.Csv do
     # :ok = :rocksdb.close(db)
     {tclose, :ok} = :timer.tc(:rocksdb, :close, [db])
 
-    Lager.debug("open time: #{topen / 1_000_000}, process time: #{process_duration}, close time: #{tclose / 1_000_000}")
-    # Lager.debug("results: #{inspect results}")
+    Logger.debug("open time: #{topen / 1_000_000}, process time: #{process_duration}, close time: #{tclose / 1_000_000}")
+    # Logger.debug("results: #{inspect results}")
 
     rec = Enum.reduce(results, 0, fn {count, _duration}, acc -> acc + count end)
     {:ok, rec}
@@ -149,7 +149,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
         #       {:ok, %{mtime: file_mtime}} <- File.stat(file_path), do: file_mtime
         #     Enum.all?(file_times, &(&1 < mod))
         #   {:error, reason} ->
-        #     Lager.warning("Error reading path #{path}: #{reason}")
+        #     Logger.warning("Error reading path #{path}: #{reason}")
         #     true
         # end
       {:error, :enoent} ->
