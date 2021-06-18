@@ -62,17 +62,21 @@ defmodule FileConfigRocksdb.Handler.Csv do
   # @impl true
   @spec load_update(Loader.name(), Loader.update(), :ets.tid()) :: Loader.table_state()
   def load_update(name, update, tid) do
-    # Assume updated files contain all records
-    {path, _state} = hd(update.files)
     config = update.config
-
-    db_path = db_path(name)
     chunk_size = config[:chunk_size] || 100
+    csv_fields = config[:csv_fields] || {1, 2}
+    db_path = db_path(name)
+    Logger.debug("#{name} #{db_path} #{inspect(update)}")
+
+    # Assume updated files contain all records
+    # {path, _state} = hd(update.files)
 
     if update_db?(db_path, update.mod) do
-      Logger.debug("Loading #{name} #{path} #{db_path}")
-      {time, {:ok, rec}} = :timer.tc(&parse_file/3, [path, db_path, chunk_size])
-      Logger.info("Loaded #{name} #{path} #{rec} rec #{time / 1_000_000} sec")
+      for {path, %{mod: file_mod}} <- Enum.reverse(update.files), update_db?(path, file_mod) do
+        Logger.debug("Loading #{name} #{path} #{db_path}")
+        {time, {:ok, rec}} = :timer.tc(&parse_file/4, [path, db_path, chunk_size, csv_fields])
+        Logger.info("Loaded #{name} #{path} #{rec} rec #{time / 1_000_000} sec")
+      end
     else
       Logger.info("Loaded #{name} #{db_path} up to date")
     end
@@ -98,7 +102,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
     records
     |> Enum.sort()
     |> Enum.chunk_every(state.chunk_size)
-    |> Enum.map(&insert_chunk(&1, state, db))
+    |> Enum.each(&insert_chunk(&1, state, db))
 
     :ok = :rocksdb.close(db)
     true
@@ -108,6 +112,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
 
   # Internal functions
 
+  # Determine if update is newer than db
   @spec update_db?(Path.t(), :calendar.datetime()) :: boolean()
   defp update_db?(path, update_mtime) do
     case File.stat(path) do
@@ -134,8 +139,8 @@ defmodule FileConfigRocksdb.Handler.Csv do
     end
   end
 
-  @spec parse_file(Path.t(), Path.t(), non_neg_integer()) :: {:ok, non_neg_integer()}
-  defp parse_file(path, db_path, chunk_size) do
+  @spec parse_file(Path.t(), Path.t(), pos_integer(), {pos_integer(), pos_integer()}) :: {:ok, non_neg_integer()}
+  defp parse_file(path, db_path, chunk_size, csv_fields) do
     {topen, {:ok, db}} =
       :timer.tc(:rocksdb, :open, [to_charlist(db_path), [create_if_missing: true]])
 
@@ -144,22 +149,18 @@ defmodule FileConfigRocksdb.Handler.Csv do
       |> File.stream!(read_ahead: 100_000)
       |> Parser.parse_stream(skip_headers: false)
       |> Stream.chunk_every(chunk_size)
-      |> Stream.map(&write_chunk(&1, db))
+      |> Stream.map(&write_chunk(&1, db, csv_fields))
 
     start_time = :os.timestamp()
     results = Enum.to_list(stream)
-    process_duration = :timer.now_diff(:os.timestamp(), start_time) / 1_000_000
+    tprocess = :timer.now_diff(:os.timestamp(), start_time) / 1_000_000
 
     # :ok = :rocksdb.close(db)
     {tclose, :ok} = :timer.tc(:rocksdb, :close, [db])
 
-    Logger.debug(
-      "open time: #{topen / 1_000_000}, process time: #{process_duration}, close time: #{
-        tclose / 1_000_000
-      }"
-    )
+    Logger.debug("open #{topen / 1_000_000}, process #{tprocess}, close #{ tclose / 1_000_000}")
 
-    # Logger.debug("results: #{inspect results}")
+    # Logger.warning("results: #{inspect results}")
 
     rec = Enum.reduce(results, 0, fn {count, _duration}, acc -> acc + count end)
     {:ok, rec}
@@ -172,9 +173,10 @@ defmodule FileConfigRocksdb.Handler.Csv do
     Path.join(state_dir, to_string(name))
   end
 
-  @spec write_chunk(list(tuple()), :rocksdb.db_handle()) :: {non_neg_integer(), non_neg_integer()}
-  def write_chunk(chunk, db) do
-    batch = for [_id, key, value] <- chunk, do: {:put, key, value}
+  @spec write_chunk(list(tuple()), :rocksdb.db_handle(), {pos_integer(), pos_integer()}) :: {non_neg_integer(), non_neg_integer()}
+  def write_chunk(chunk, db, {k, v}) do
+    batch = for row <- chunk, do: {:put, Enum.at(row, k - 1), Enum.at(row, v - 1)}
+    # Logger.warning("batch: #{inspect(batch)}")
     # :ok = :rocksdb.write(db, batch, sync: true)
     {duration, :ok} = :timer.tc(:rocksdb, :write, [db, batch, []])
     {length(batch), duration}
