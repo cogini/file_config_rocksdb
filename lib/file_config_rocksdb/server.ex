@@ -55,17 +55,21 @@ defmodule FileConfigRocksdb.Server do
 
   def handle_call({:write, db_path, batch, options}, _from, state) do
     {{:ok, db}, new_state} = get_db(db_path, state)
-    {duration, :ok} = :timer.tc(:rocksdb, :write, [db, batch, options])
-    Logger.debug("rocksdb write #{db_path} duration #{duration}")
+    # {duration, :ok} = :timer.tc(:rocksdb, :write, [db, batch, options])
+    # Logger.debug("rocksdb write #{db_path} duration #{duration}")
 
-    reply = {length(batch), duration}
+    # reply = {length(batch), duration}
+    reply = :rocksdb.write(db, batch, options)
+
     {:reply, reply, new_state}
   end
 
   def handle_call({:get, db_path, key, options}, _from, state) do
     {{:ok, db}, new_state} = get_db(db_path, state)
-    {duration, result} = :timer.tc(:rocksdb, :get, [db, key, options])
-    Logger.debug("rocksdb get #{db_path} #{key} duration #{duration}")
+    # {duration, result} = :timer.tc(:rocksdb, :get, [db, key, options])
+    # Logger.debug("rocksdb get #{db_path} #{key} duration #{duration}")
+    result = :rocksdb.get(db, key, options)
+
     {:reply, result, new_state}
   end
 
