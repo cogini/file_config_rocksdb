@@ -24,6 +24,7 @@ defmodule FileConfigRocksdb.Server do
   def start_link do
     :gen_server.start_link({:local, @server}, __MODULE__, [], [])
   end
+
   def start_link(args, opts \\ []) do
     :gen_server.start_link({:local, @server}, __MODULE__, args, opts)
   end
@@ -53,19 +54,19 @@ defmodule FileConfigRocksdb.Server do
   end
 
   def handle_call({:write, db_path, batch, options}, _from, state) do
-    db = Map.get(state, db_path)
+    {{:ok, db}, new_state} = get_db(db_path, state)
     {duration, :ok} = :timer.tc(:rocksdb, :write, [db, batch, options])
     Logger.debug("rocksdb write #{db_path} duration #{duration}")
 
     reply = {length(batch), duration}
-    {:reply, reply, state}
+    {:reply, reply, new_state}
   end
 
   def handle_call({:get, db_path, key, options}, _from, state) do
-    db = Map.get(state, db_path)
+    {{:ok, db}, new_state} = get_db(db_path, state)
     {duration, result} = :timer.tc(:rocksdb, :get, [db, key, options])
     Logger.debug("rocksdb get #{db_path} #{key} duration #{duration}")
-    {:reply, result, state}
+    {:reply, result, new_state}
   end
 
   def handle_call(request, _from, state) do
@@ -73,4 +74,19 @@ defmodule FileConfigRocksdb.Server do
     {:reply, :ok, state}
   end
 
+  defp get_db(db_path, state) do
+    case Map.get(state, db_path) do
+      {:ok, _db} = reply ->
+        {reply, state}
+      :error ->
+        open_options = [create_if_missing: true]
+        case :rocksdb.open(to_charlist(db_path), open_options) do
+          {:ok, db} = reply ->
+            {reply, Map.put(state, db_path, db)}
+          {:error, reason} = reply ->
+            Logger.debug("Error opening rocksdb #{db_path}: #{inspect(reason)}")
+            {reply, state}
+        end
+    end
+  end
 end
