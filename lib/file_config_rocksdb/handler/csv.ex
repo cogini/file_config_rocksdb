@@ -96,7 +96,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
       # :ok = :rocksdb.close(db)
       {tclose, :ok} = :timer.tc(:rocksdb, :close, [db])
 
-      Logger.debug("Loaded #{name} open #{topen / 1_000_000}, close #{ tclose / 1_000_000}")
+      # Logger.debug("Loaded #{name} open #{topen / 1_000_000}, close #{ tclose / 1_000_000}")
     else
       Logger.info("Loaded #{name} #{db_path} up to date")
     end
