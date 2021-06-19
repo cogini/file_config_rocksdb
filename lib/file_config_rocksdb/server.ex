@@ -75,7 +75,7 @@ defmodule FileConfigRocksdb.Server do
   end
 
   defp get_db(db_path, state) do
-    case Map.get(state, db_path) do
+    case Map.fetch(state, db_path) do
       {:ok, _db} = reply ->
         {reply, state}
       :error ->
