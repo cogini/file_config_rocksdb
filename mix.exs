@@ -13,6 +13,8 @@ defmodule FileConfigRocksdb.MixProject do
       package: package(),
       docs: docs(),
       deps: deps(),
+      source_url: @github,
+      homepage_url: @github,
       dialyzer: [
         plt_add_apps: [:mix]
         # plt_add_deps: true,
@@ -35,7 +37,8 @@ defmodule FileConfigRocksdb.MixProject do
 
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger],
+      mod: {FileConfigRocksdb.Application, []}
     ]
   end
 
@@ -43,9 +46,9 @@ defmodule FileConfigRocksdb.MixProject do
   defp deps do
     [
       {:credo, "~> 1.5", only: [:dev, :test], runtime: false},
-      {:excoveralls, "~> 0.14.0", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.23", only: :dev, runtime: false},
+      {:excoveralls, "~> 0.14.0", only: [:dev, :test], runtime: false},
       {:nimble_csv, "~> 0.3"},
       # {:rocksdb, git: "https://gitlab.com/barrel-db/erlang-rocksdb.git"},
       {:rocksdb, "~> 1.6"},
