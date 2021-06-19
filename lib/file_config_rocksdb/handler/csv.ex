@@ -10,6 +10,8 @@ defmodule FileConfigRocksdb.Handler.Csv do
   alias FileConfig.Loader
   # alias FileConfig.Lib
 
+  alias FileConfigRocksdb.Server
+
   # @impl true
   @spec lookup(Loader.table_state(), term()) :: term()
   def lookup(%{id: tid, name: name, parser: parser} = state, key) do
@@ -30,10 +32,13 @@ defmodule FileConfigRocksdb.Handler.Csv do
         # TODO: somehow reuse db handle
 
         # case :rocksdb.open(db_path, create_if_missing: false) do
-        case :rocksdb.open(db_path, create_if_missing: true) do
-          {:ok, db} ->
+        # case :rocksdb.open(db_path, create_if_missing: true) do
+
+        case Server.open(db_path, create_if_missing: true) do
+          {:ok, _db} ->
               return =
-                case :rocksdb.get(db, key, []) do
+                # case :rocksdb.get(db, key, []) do
+                case Server.get(db_path, key, []) do
                   {:ok, bin} ->
                     case parser.decode(bin, parser_opts) do
                       {:ok, value} ->
@@ -56,7 +61,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
                     :undefined
                 end
 
-              :ok = :rocksdb.close(db)
+              # :ok = :rocksdb.close(db)
               return
           {:error, reason} ->
             Logger.warning("Error opening rocksdb #{db_path}: #{inspect(reason)}")
@@ -74,12 +79,14 @@ defmodule FileConfigRocksdb.Handler.Csv do
     Logger.debug("#{name} #{db_path} #{inspect(update)}")
 
     if update_db?(db_path, update.mod) do
-      {topen, {:ok, db}} =
-        :timer.tc(:rocksdb, :open, [to_charlist(db_path), [create_if_missing: true]])
+      # {topen, {:ok, db}} =
+      #   :timer.tc(:rocksdb, :open, [to_charlist(db_path), [create_if_missing: true]])
+
+      {:ok, db} = Server.open(db_path, create_if_missing: true)
 
       for {path, %{mod: file_mod}} <- Enum.reverse(update.files), update_db?(path, file_mod) do
         Logger.debug("Loading #{name} #{path} #{db_path}")
-        {time, {:ok, rec}} = :timer.tc(&parse_file/3, [path, db, config])
+        {time, {:ok, rec}} = :timer.tc(&parse_file/3, [path, db_path, config])
         Logger.info("Loaded #{name} #{path} #{rec} rec #{time / 1_000_000} sec")
       end
 
@@ -161,8 +168,9 @@ defmodule FileConfigRocksdb.Handler.Csv do
     end
   end
 
-  @spec parse_file(Path.t(), :rocksdb.db_handle(), map()) :: {:ok, non_neg_integer()}
-  defp parse_file(path, db, config) do
+ #  @spec parse_file(Path.t(), :rocksdb.db_handle(), map()) :: {:ok, non_neg_integer()}
+  @spec parse_file(Path.t(), Path.t(), map()) :: {:ok, non_neg_integer()}
+  defp parse_file(path, db_path, config) do
     chunk_size = config[:chunk_size] || 100
     csv_fields = config[:csv_fields] || {1, 2}
 
@@ -171,7 +179,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
       |> File.stream!(read_ahead: 100_000)
       |> Parser.parse_stream(skip_headers: false)
       |> Stream.chunk_every(chunk_size)
-      |> Stream.map(&write_chunk(&1, db, csv_fields))
+      |> Stream.map(&write_chunk(&1, db_path, csv_fields))
 
     # start_time = :os.timestamp()
     results = Enum.to_list(stream)
@@ -190,20 +198,24 @@ defmodule FileConfigRocksdb.Handler.Csv do
     Path.join(state_dir, to_string(name))
   end
 
-  @spec write_chunk(list(tuple()), :rocksdb.db_handle(), {pos_integer(), pos_integer()}) :: {non_neg_integer(), non_neg_integer()}
-  def write_chunk(chunk, db, {k, v}) do
+  # @spec write_chunk(list(tuple()), :rocksdb.db_handle(), {pos_integer(), pos_integer()}) :: {non_neg_integer(), non_neg_integer()}
+  @spec write_chunk(list(tuple()), Path.t(), {pos_integer(), pos_integer()}) :: {non_neg_integer(), non_neg_integer()}
+  def write_chunk(chunk, db_path, {k, v}) do
     batch = for row <- chunk, do: {:put, Enum.at(row, k - 1), Enum.at(row, v - 1)}
     # Logger.warning("batch: #{inspect(batch)}")
     # :ok = :rocksdb.write(db, batch, sync: true)
-    {duration, :ok} = :timer.tc(:rocksdb, :write, [db, batch, []])
+    # {duration, :ok} = :timer.tc(:rocksdb, :write, [db, batch, []])
+    {duration, :ok} = :timer.tc(Server, :write, [db_path, batch, []])
     {length(batch), duration}
   end
 
-  @spec insert_chunk(list(tuple()), :ets.tab(), :rocksdb.db_handle()) ::
+  # @spec insert_chunk(list(tuple()), :ets.tab(), :rocksdb.db_handle()) ::
+  #         {non_neg_integer(), non_neg_integer()}
+  @spec insert_chunk(list(tuple()), :ets.tab(), Path.t()) ::
           {non_neg_integer(), non_neg_integer()}
-  defp insert_chunk(chunk, tab, db) do
+  defp insert_chunk(chunk, tab, db_path) do
     batch = for {key, value} <- chunk, do: {:put, key, value}
-    {duration, :ok} = :timer.tc(:rocksdb, :write, [db, batch, []])
+    {duration, :ok} = :timer.tc(Server, :write, [db_path, batch, []])
     true = :ets.insert(tab, chunk)
 
     {length(batch), duration}

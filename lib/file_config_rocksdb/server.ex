@@ -21,7 +21,7 @@ defmodule FileConfigRocksdb.Server do
     :gen_server.call(@server, {:get, db_path, key, options}, @call_timeout)
   end
 
-  # @spec open(Path.t(), Keyword.t()) :: 
+  # @spec open(Path.t(), Keyword.t()) ::
   # def open(file_path, modified) do
   #   :gen_server.call(@server, {:get_file_data, file_path, modified}, @call_timeout)
   # end
@@ -39,13 +39,18 @@ defmodule FileConfigRocksdb.Server do
   end
 
   def handle_call({:open, db_path, options}, _from, state) do
-    {reply, new_state} = 
-      case :rocksdb.open(db_path, options) do
-        {:ok, db} = reply ->
-          {reply, Map.put(state, db_path, db)} 
-        {:error, reason} = reply ->
-          Logger.debug("Error opening rocksdb #{db_path}: #{inspect(reason)}")
+    {reply, new_state} =
+      case Map.fetch(state, db_path) do
+        {:ok, _value} = reply ->
           {reply, state}
+        :error ->
+          case :rocksdb.open(to_charlist(db_path), options) do
+            {:ok, db} = reply ->
+              {reply, Map.put(state, db_path, db)}
+            {:error, reason} = reply ->
+              Logger.debug("Error opening rocksdb #{db_path}: #{inspect(reason)}")
+              {reply, state}
+          end
       end
     {:reply, reply, new_state}
   end
