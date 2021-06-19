@@ -28,34 +28,39 @@ defmodule FileConfigRocksdb.Handler.Csv do
       [] ->
         # Not found
         # TODO: somehow reuse db handle
-        {:ok, db} = :rocksdb.open(db_path, create_if_missing: false)
 
-        return =
-          case :rocksdb.get(db, key, []) do
-            {:ok, bin} ->
-              case parser.decode(bin, parser_opts) do
-                {:ok, value} ->
-                  # Cache parsed value
-                  true = :ets.insert(tid, [{key, value}])
-                  {:ok, value}
+        case :rocksdb.open(db_path, create_if_missing: false) do
+          {:ok, db} ->
+              return =
+                case :rocksdb.get(db, key, []) do
+                  {:ok, bin} ->
+                    case parser.decode(bin, parser_opts) do
+                      {:ok, value} ->
+                        # Cache parsed value
+                        true = :ets.insert(tid, [{key, value}])
+                        {:ok, value}
 
-                {:error, reason} ->
-                  Logger.debug("Error parsing table #{name} key #{key}: #{inspect(reason)}")
-                  {:ok, bin}
-              end
+                      {:error, reason} ->
+                        Logger.debug("Error parsing table #{name} key #{key}: #{inspect(reason)}")
+                        {:ok, bin}
+                    end
 
-            :not_found ->
-              # Cache "not found" result
-              true = :ets.insert(tid, [{key, :undefined}])
-              :undefined
+                  :not_found ->
+                    # Cache "not found" result
+                    true = :ets.insert(tid, [{key, :undefined}])
+                    :undefined
 
-            error ->
-              Logger.warning("Error reading from rocksdb #{name} #{key}: #{inspect(error)}")
-              :undefined
-          end
+                  error ->
+                    Logger.warning("Error reading from rocksdb #{name} #{key}: #{inspect(error)}")
+                    :undefined
+                end
 
-        :ok = :rocksdb.close(db)
-        return
+              :ok = :rocksdb.close(db)
+              return
+          {:error, reason} ->
+            Logger.warning("Error opening rocksdb #{db_path}: #{inspect(reason)}")
+            :undefined
+        end
     end
   end
 
