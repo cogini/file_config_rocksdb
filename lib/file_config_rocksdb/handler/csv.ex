@@ -110,7 +110,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
     |> Enum.each(&insert_chunk(&1, state, db))
 
     # Record last updat
-    :ok = File.touch(state.db_path <> ".stat")
+    :ok = File.touch(status_path(state.db_path))
 
     :ok = :rocksdb.close(db)
     true
@@ -120,14 +120,18 @@ defmodule FileConfigRocksdb.Handler.Csv do
 
   # Internal functions
 
+  # This file keeps track of the last update to the db
+  defp status_path(db_path) do
+    # Path.join(db_path, "CURRENT")
+    db_path <> ".stat"
+  end
+
   # Determine if update is newer than db
   @spec update_db?(Path.t(), :calendar.datetime()) :: boolean()
   defp update_db?(db_path, update_mtime) do
     case File.stat(db_path) do
       {:ok, _dir_stat} ->
-        status_path = db_path <> ".stat"
-        # status_path = Path.join(db_path, "CURRENT")
-        case File.stat(status_path) do
+        case File.stat(status_path(db_path)) do
           {:ok, %{mtime: file_mtime}} ->
             file_mtime < update_mtime
           {:error, _reason} ->
@@ -165,7 +169,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
     tprocess = :timer.now_diff(:os.timestamp(), start_time) / 1_000_000
 
     # Record last file load
-    :ok = File.touch(db_path <> ".stat")
+    :ok = File.touch(status_path(db_path))
 
     # :ok = :rocksdb.close(db)
     {tclose, :ok} = :timer.tc(:rocksdb, :close, [db])
