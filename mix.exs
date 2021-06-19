@@ -49,6 +49,7 @@ defmodule FileConfigRocksdb.MixProject do
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.23", only: :dev, runtime: false},
       {:excoveralls, "~> 0.14.0", only: [:dev, :test], runtime: false},
+      {:file_config, github: "cogini/file_config"},
       {:nimble_csv, "~> 0.3"},
       # {:rocksdb, git: "https://gitlab.com/barrel-db/erlang-rocksdb.git"},
       {:rocksdb, "~> 1.6"},
