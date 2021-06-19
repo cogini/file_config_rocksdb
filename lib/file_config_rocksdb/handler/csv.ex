@@ -29,44 +29,67 @@ defmodule FileConfigRocksdb.Handler.Csv do
 
       [] ->
         # Not found
+        case Server.get(db_path, key, []) do
+          {:ok, bin} ->
+            case parser.decode(bin, parser_opts) do
+              {:ok, value} ->
+                # Cache parsed value
+                true = :ets.insert(tid, [{key, value}])
+                {:ok, value}
+
+              {:error, reason} ->
+                Logger.debug("Error parsing table #{name} key #{key}: #{inspect(reason)}")
+                {:ok, bin}
+            end
+
+          :not_found ->
+            # Cache "not found" result
+            true = :ets.insert(tid, [{key, :undefined}])
+            :undefined
+
+          error ->
+            Logger.warning("Error reading from rocksdb #{name} #{key}: #{inspect(error)}")
+            :undefined
+        end
+
         # TODO: somehow reuse db handle
 
         # case :rocksdb.open(db_path, create_if_missing: false) do
         # case :rocksdb.open(db_path, create_if_missing: true) do
 
-        case Server.open(db_path, create_if_missing: true) do
-          {:ok, _db} ->
-              return =
-                # case :rocksdb.get(db, key, []) do
-                case Server.get(db_path, key, []) do
-                  {:ok, bin} ->
-                    case parser.decode(bin, parser_opts) do
-                      {:ok, value} ->
-                        # Cache parsed value
-                        true = :ets.insert(tid, [{key, value}])
-                        {:ok, value}
-
-                      {:error, reason} ->
-                        Logger.debug("Error parsing table #{name} key #{key}: #{inspect(reason)}")
-                        {:ok, bin}
-                    end
-
-                  :not_found ->
-                    # Cache "not found" result
-                    true = :ets.insert(tid, [{key, :undefined}])
-                    :undefined
-
-                  error ->
-                    Logger.warning("Error reading from rocksdb #{name} #{key}: #{inspect(error)}")
-                    :undefined
-                end
-
-              # :ok = :rocksdb.close(db)
-              return
-          {:error, reason} ->
-            Logger.warning("Error opening rocksdb #{db_path}: #{inspect(reason)}")
-            :undefined
-        end
+        # case Server.open(db_path, create_if_missing: true) do
+        #   {:ok, _db} ->
+        #       return =
+        #         # case :rocksdb.get(db, key, []) do
+        #         case Server.get(db_path, key, []) do
+        #           {:ok, bin} ->
+        #             case parser.decode(bin, parser_opts) do
+        #               {:ok, value} ->
+        #                 # Cache parsed value
+        #                 true = :ets.insert(tid, [{key, value}])
+        #                 {:ok, value}
+        #
+        #               {:error, reason} ->
+        #                 Logger.debug("Error parsing table #{name} key #{key}: #{inspect(reason)}")
+        #                 {:ok, bin}
+        #             end
+        #
+        #           :not_found ->
+        #             # Cache "not found" result
+        #             true = :ets.insert(tid, [{key, :undefined}])
+        #             :undefined
+        #
+        #           error ->
+        #             Logger.warning("Error reading from rocksdb #{name} #{key}: #{inspect(error)}")
+        #             :undefined
+        #         end
+        #
+        #       # :ok = :rocksdb.close(db)
+        #       return
+        #   {:error, reason} ->
+        #     Logger.warning("Error opening rocksdb #{db_path}: #{inspect(reason)}")
+        #     :undefined
+        # end
     end
   end
 
