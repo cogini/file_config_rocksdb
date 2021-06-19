@@ -21,14 +21,11 @@ defmodule FileConfigRocksdb.Server do
     :gen_server.call(@server, {:get, db_path, key, options}, @call_timeout)
   end
 
-  # @spec open(Path.t(), Keyword.t()) ::
-  # def open(file_path, modified) do
-  #   :gen_server.call(@server, {:get_file_data, file_path, modified}, @call_timeout)
-  # end
-
-  @spec start_link() :: {:ok, pid} | :ignore | {:error, term}
   def start_link do
     :gen_server.start_link({:local, @server}, __MODULE__, [], [])
+  end
+  def start_link(args, opts \\ []) do
+    :gen_server.start_link({:local, @server}, __MODULE__, args, opts)
   end
 
   # gen_server callbacks
