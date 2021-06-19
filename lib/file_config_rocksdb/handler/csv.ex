@@ -29,7 +29,8 @@ defmodule FileConfigRocksdb.Handler.Csv do
         # Not found
         # TODO: somehow reuse db handle
 
-        case :rocksdb.open(db_path, create_if_missing: false) do
+        # case :rocksdb.open(db_path, create_if_missing: false) do
+        case :rocksdb.open(db_path, create_if_missing: true) do
           {:ok, db} ->
               return =
                 case :rocksdb.get(db, key, []) do
@@ -67,21 +68,28 @@ defmodule FileConfigRocksdb.Handler.Csv do
   # @impl true
   @spec load_update(Loader.name(), Loader.update(), :ets.tid()) :: Loader.table_state()
   def load_update(name, update, tid) do
+    db_path = db_path(name)
     config = update.config
     chunk_size = config[:chunk_size] || 100
-    csv_fields = config[:csv_fields] || {1, 2}
-    db_path = db_path(name)
     Logger.debug("#{name} #{db_path} #{inspect(update)}")
 
-    # Assume updated files contain all records
-    # {path, _state} = hd(update.files)
-
     if update_db?(db_path, update.mod) do
+      {topen, {:ok, db}} =
+        :timer.tc(:rocksdb, :open, [to_charlist(db_path), [create_if_missing: true]])
+
       for {path, %{mod: file_mod}} <- Enum.reverse(update.files), update_db?(path, file_mod) do
         Logger.debug("Loading #{name} #{path} #{db_path}")
-        {time, {:ok, rec}} = :timer.tc(&parse_file/4, [path, db_path, chunk_size, csv_fields])
+        {time, {:ok, rec}} = :timer.tc(&parse_file/3, [path, db, config])
         Logger.info("Loaded #{name} #{path} #{rec} rec #{time / 1_000_000} sec")
       end
+
+      # Record last file load
+      :ok = File.touch(status_path(db_path))
+
+      # :ok = :rocksdb.close(db)
+      {tclose, :ok} = :timer.tc(:rocksdb, :close, [db])
+
+      Logger.debug("Loaded #{name} open #{topen / 1_000_000}, close #{ tclose / 1_000_000}")
     else
       Logger.info("Loaded #{name} #{db_path} up to date")
     end
@@ -102,7 +110,8 @@ defmodule FileConfigRocksdb.Handler.Csv do
   # @impl true
   @spec insert_records(Loader.table_state(), {term(), term()} | [{term(), term()}]) :: true
   def insert_records(state, records) when is_list(records) do
-    {:ok, db} = :rocksdb.open(state.db_path, create_if_missing: false)
+    # {:ok, db} = :rocksdb.open(state.db_path, create_if_missing: false)
+    {:ok, db} = :rocksdb.open(state.db_path, create_if_missing: true)
 
     records
     |> Enum.sort()
@@ -152,10 +161,10 @@ defmodule FileConfigRocksdb.Handler.Csv do
     end
   end
 
-  @spec parse_file(Path.t(), Path.t(), pos_integer(), {pos_integer(), pos_integer()}) :: {:ok, non_neg_integer()}
-  defp parse_file(path, db_path, chunk_size, csv_fields) do
-    {topen, {:ok, db}} =
-      :timer.tc(:rocksdb, :open, [to_charlist(db_path), [create_if_missing: true]])
+  @spec parse_file(Path.t(), :rocksdb.db_handle(), map()) :: {:ok, non_neg_integer()}
+  defp parse_file(path, db, config) do
+    chunk_size = config[:chunk_size] || 100
+    csv_fields = config[:csv_fields] || {1, 2}
 
     stream =
       path
@@ -164,17 +173,9 @@ defmodule FileConfigRocksdb.Handler.Csv do
       |> Stream.chunk_every(chunk_size)
       |> Stream.map(&write_chunk(&1, db, csv_fields))
 
-    start_time = :os.timestamp()
+    # start_time = :os.timestamp()
     results = Enum.to_list(stream)
-    tprocess = :timer.now_diff(:os.timestamp(), start_time) / 1_000_000
-
-    # Record last file load
-    :ok = File.touch(status_path(db_path))
-
-    # :ok = :rocksdb.close(db)
-    {tclose, :ok} = :timer.tc(:rocksdb, :close, [db])
-
-    Logger.debug("open #{topen / 1_000_000}, process #{tprocess}, close #{ tclose / 1_000_000}")
+    # tprocess = :timer.now_diff(:os.timestamp(), start_time) / 1_000_000
 
     # Logger.warning("results: #{inspect results}")
 
