@@ -5,7 +5,7 @@ defmodule FileConfigRocksdb.Server do
   require Logger
 
   @server __MODULE__
-  @call_timeout 1000
+  @call_timeout 10000
 
   # API
 
