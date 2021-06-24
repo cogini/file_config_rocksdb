@@ -111,10 +111,9 @@ defmodule FileConfigRocksdb.Handler.Csv do
         Logger.debug("Loading #{name} #{path} #{db_path}")
         {time, {:ok, rec}} = :timer.tc(&parse_file/3, [path, db_path, config])
         Logger.info("Loaded #{name} #{path} #{rec} rec #{time / 1_000_000} sec")
+        # Record last file load
+        :ok = File.touch(status_path(db_path), file_mod)
       end
-
-      # Record last file load
-      :ok = File.touch(status_path(db_path))
 
       # :ok = :rocksdb.close(db)
       # {tclose, :ok} = :timer.tc(:rocksdb, :close, [db])
