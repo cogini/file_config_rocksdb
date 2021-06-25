@@ -5,7 +5,8 @@ defmodule FileConfigRocksdb.Server do
   require Logger
 
   @server __MODULE__
-  @call_timeout 30000
+  @call_timeout 30_000
+  @max_backoff 10_000
 
   # API
 
@@ -66,11 +67,17 @@ defmodule FileConfigRocksdb.Server do
     {duration, reply} = :timer.tc(:rocksdb, :write, [db, batch, options])
     duration = div(duration, 1024) # convert microseconds to milliseconds
 
-    if duration > state.backoff_threshold do
-      backoff = state.backoff_multiple * duration
-      Logger.warning("rocksdb #{db_path} duration #{duration} backoff #{backoff}")
-      # Metrics.inc([:records, :throttle], [topic: topic], count)
-      Process.sleep(backoff)
+    backoff = state.backoff_multiple * duration
+    cond do
+      backoff > @max_backoff ->
+      Logger.warning("rocksdb #{db_path} duration #{duration} backoff #{@max_backoff}")
+        Process.sleep(@max_backoff)
+      duration > state.backoff_threshold ->
+        Logger.warning("rocksdb #{db_path} duration #{duration} backoff #{backoff}")
+        # Metrics.inc([:records, :throttle], [topic: topic], count)
+        Process.sleep(backoff)
+      true ->
+        true
     end
     {:reply, reply, state}
   end
