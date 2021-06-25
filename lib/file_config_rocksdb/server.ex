@@ -31,9 +31,12 @@ defmodule FileConfigRocksdb.Server do
 
   # gen_server callbacks
 
-  def init(_args) do
-    Logger.debug("Starting")
-    {:ok, %{}}
+  def init(args) do
+    {:ok, %{
+      db_cache: {},
+      backoff_threshold: args[:backoff_threshold] || 200,
+      backoff_multiple: args[:backoff_multiple] || 10,
+    }}
   end
 
   def handle_call({:open, db_path, options}, _from, state) do
@@ -55,12 +58,18 @@ defmodule FileConfigRocksdb.Server do
 
   def handle_call({:write, db_path, batch, options}, _from, state) do
     {{:ok, db}, new_state} = get_db(db_path, state)
-    # {duration, :ok} = :timer.tc(:rocksdb, :write, [db, batch, options])
-    # Logger.debug("rocksdb write #{db_path} duration #{duration}")
-
     # reply = {length(batch), duration}
-    reply = :rocksdb.write(db, batch, options)
+    # reply = :rocksdb.write(db, batch, options)
 
+    {duration, reply} = :timer.tc(:rocksdb, :write, [db, batch, options])
+    duration = Float.floor(duration / 1024) # convert microseconds to milliseconds
+
+    if duration > state.backoff_threshold do
+      backoff = state.backoff_multiple * duration
+      Logger.warning("rocksdb #{db_path} duration #{duration} backoff #{backoff}")
+      # Metrics.inc([:records, :throttle], [topic: topic], count)
+      Process.sleep(backoff)
+    end
     {:reply, reply, new_state}
   end
 
@@ -79,14 +88,15 @@ defmodule FileConfigRocksdb.Server do
   end
 
   defp get_db(db_path, state) do
-    case Map.fetch(state, db_path) do
+    db_cache = state.db_cache
+    case Map.fetch(db_cache, db_path) do
       {:ok, _db} = reply ->
         {reply, state}
       :error ->
         open_options = [create_if_missing: true]
         case :rocksdb.open(to_charlist(db_path), open_options) do
           {:ok, db} = reply ->
-            {reply, Map.put(state, db_path, db)}
+            {reply, %{state | db_cache: Map.put(db_cache, db_path, db)}}
           {:error, reason} = reply ->
             Logger.debug("Error opening rocksdb #{db_path}: #{inspect(reason)}")
             {reply, state}
