@@ -88,15 +88,19 @@ defmodule FileConfigRocksdb.Server do
   end
 
   defp get_db(db_path, state) do
+    Logger.info("state: #{inspect(state)}")
     db_cache = state.db_cache
     case Map.fetch(db_cache, db_path) do
-      {:ok, _db} = reply ->
+      {:ok, db} = reply ->
+        Logger.info("Using cached handle #{db_path} #{db}")
         {reply, state}
       :error ->
         open_options = [create_if_missing: true]
         case :rocksdb.open(to_charlist(db_path), open_options) do
           {:ok, db} = reply ->
-            {reply, %{state | db_cache: Map.put(db_cache, db_path, db)}}
+            Logger.info("Opened #{db_path} #{db}")
+            db_cache = Map.put(db_cache, db_path, db)
+            {reply, %{state | db_cache: db_cache}}
           {:error, reason} = reply ->
             Logger.debug("Error opening rocksdb #{db_path}: #{inspect(reason)}")
             {reply, state}
