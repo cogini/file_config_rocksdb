@@ -99,7 +99,7 @@ defmodule FileConfigRocksdb.Server do
         open_options = [create_if_missing: true]
         case :rocksdb.open(to_charlist(db_path), open_options) do
           {:ok, db} = reply ->
-            Logger.info("Opened #{db_path} #{db}")
+            Logger.info("Opened #{db_path} #{inspect(db)}")
             db_cache = Map.put(db_cache, db_path, db)
             {reply, %{state | db_cache: db_cache}}
           {:error, reason} = reply ->
