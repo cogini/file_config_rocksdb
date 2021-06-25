@@ -45,6 +45,7 @@ defmodule FileConfigRocksdb.Server do
         {:ok, _value} = reply ->
           {reply, state}
         :error ->
+          Logger.warning("open #{db_path}")
           case :rocksdb.open(to_charlist(db_path), options) do
             {:ok, db} = reply ->
               {reply, Map.put(state, db_path, db)}
