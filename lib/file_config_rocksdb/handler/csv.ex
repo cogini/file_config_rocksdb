@@ -54,9 +54,6 @@ defmodule FileConfigRocksdb.Handler.Csv do
 
         # TODO: somehow reuse db handle
 
-        # case :rocksdb.open(db_path, create_if_missing: false) do
-        # case :rocksdb.open(db_path, create_if_missing: true) do
-
         # case Server.open(db_path, create_if_missing: true) do
         #   {:ok, _db} ->
         #       return =
@@ -140,17 +137,17 @@ defmodule FileConfigRocksdb.Handler.Csv do
   @spec insert_records(Loader.table_state(), {term(), term()} | [{term(), term()}]) :: true
   def insert_records(state, records) when is_list(records) do
     # {:ok, db} = :rocksdb.open(state.db_path, create_if_missing: false)
-    {:ok, db} = :rocksdb.open(state.db_path, create_if_missing: true)
+    # {:ok, db} = :rocksdb.open(state.db_path, create_if_missing: true)
 
     records
     |> Enum.sort()
     |> Enum.chunk_every(state.chunk_size)
-    |> Enum.each(&insert_chunk(&1, state, db))
+    |> Enum.each(&insert_chunk(&1, state, state.db))
 
     # Record last updat
     :ok = File.touch(status_path(state.db_path))
 
-    :ok = :rocksdb.close(db)
+    # :ok = :rocksdb.close(db)
     true
   end
 
