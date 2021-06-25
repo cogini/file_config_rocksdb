@@ -6,20 +6,25 @@ defmodule FileConfigRocksdb.Server do
 
   @server __MODULE__
   @call_timeout 30_000
-  @max_backoff 10_000
 
   # API
 
   def open(db_path, options) do
-    :gen_server.call(@server, {:open, db_path, options}, @call_timeout)
+    {duration, reply} = :timer.tc(:gen_server, :call, [@server, {:open, db_path, options}, @call_timeout])
+    backoff(duration)
+    reply
   end
 
   def write(db_path, batch, options) do
-    :gen_server.call(@server, {:write, db_path, batch, options}, @call_timeout)
+    {duration, reply} = :timer.tc(:gen_server, :call, [@server, {:write, db_path, batch, options}, @call_timeout])
+    backoff(duration)
+    reply
   end
 
   def get(db_path, key, options) do
-    :gen_server.call(@server, {:get, db_path, key, options}, @call_timeout)
+    {duration, reply} = :timer.tc(:gen_server, :call, [@server, {:get, db_path, key, options}, @call_timeout])
+    backoff(duration)
+    reply
   end
 
   def start_link do
@@ -61,33 +66,13 @@ defmodule FileConfigRocksdb.Server do
 
   def handle_call({:write, db_path, batch, options}, _from, state) do
     {:ok, db} = get_db(db_path)
-    # reply = {length(batch), duration}
-    # reply = :rocksdb.write(db, batch, options)
-
-    {duration, reply} = :timer.tc(:rocksdb, :write, [db, batch, options])
-    duration = div(duration, 1024) # convert microseconds to milliseconds
-
-    backoff = state.backoff_multiple * duration
-    cond do
-      backoff > @max_backoff ->
-      Logger.warning("rocksdb #{db_path} duration #{duration} backoff #{@max_backoff}")
-        Process.sleep(@max_backoff)
-      duration > state.backoff_threshold ->
-        Logger.warning("rocksdb #{db_path} duration #{duration} backoff #{backoff}")
-        # Metrics.inc([:records, :throttle], [topic: topic], count)
-        Process.sleep(backoff)
-      true ->
-        true
-    end
+    reply = :rocksdb.write(db, batch, options)
     {:reply, reply, state}
   end
 
   def handle_call({:get, db_path, key, options}, _from, state) do
     {:ok, db} = get_db(db_path)
-    # {duration, result} = :timer.tc(:rocksdb, :get, [db, key, options])
-    # Logger.debug("rocksdb get #{db_path} #{key} duration #{duration}")
     result = :rocksdb.get(db, key, options)
-
     {:reply, result, state}
   end
 
@@ -131,5 +116,24 @@ defmodule FileConfigRocksdb.Server do
     #         {reply, state}
     #     end
     # end
+  end
+
+  def backoff(duration, opts \\ []) do
+    threshold = opts[:threshold] || 300
+    multiple = opts[:multiple] || 5
+    max = opts[:max] || 10_000
+
+    duration = div(duration, 1024) # convert microseconds to milliseconds
+    backoff = duration * multiple
+    cond do
+      backoff > max ->
+      Logger.warning("duration #{duration} backoff #{max}")
+        Process.sleep(max)
+      duration > threshold ->
+        Logger.warning("duration #{duration} backoff #{backoff}")
+        Process.sleep(backoff)
+      true ->
+        true
+    end
   end
 end
