@@ -32,8 +32,9 @@ defmodule FileConfigRocksdb.Server do
   # gen_server callbacks
 
   def init(args) do
+    :ets.new(__MODULE__, [:named_table, :public, :set])
+
     {:ok, %{
-      db_cache: %{},
       backoff_threshold: args[:backoff_threshold] || 300,
       backoff_multiple: args[:backoff_multiple] || 5,
     }}
@@ -58,7 +59,7 @@ defmodule FileConfigRocksdb.Server do
   end
 
   def handle_call({:write, db_path, batch, options}, _from, state) do
-    {{:ok, db}, new_state} = get_db(db_path, state)
+    {:ok, db} = get_db(db_path)
     # reply = {length(batch), duration}
     # reply = :rocksdb.write(db, batch, options)
 
@@ -71,16 +72,16 @@ defmodule FileConfigRocksdb.Server do
       # Metrics.inc([:records, :throttle], [topic: topic], count)
       Process.sleep(backoff)
     end
-    {:reply, reply, new_state}
+    {:reply, reply, state}
   end
 
   def handle_call({:get, db_path, key, options}, _from, state) do
-    {{:ok, db}, new_state} = get_db(db_path, state)
+    {:ok, db} = get_db(db_path)
     # {duration, result} = :timer.tc(:rocksdb, :get, [db, key, options])
     # Logger.debug("rocksdb get #{db_path} #{key} duration #{duration}")
     result = :rocksdb.get(db, key, options)
 
-    {:reply, result, new_state}
+    {:reply, result, state}
   end
 
   def handle_call(request, _from, state) do
@@ -88,24 +89,40 @@ defmodule FileConfigRocksdb.Server do
     {:reply, :ok, state}
   end
 
-  defp get_db(db_path, state) do
-    # Logger.error("state: #{inspect(state)}")
-    db_cache = state.db_cache
-    case Map.fetch(db_cache, db_path) do
-      {:ok, db} = reply ->
-        # Logger.info("Using cached handle #{db_path} #{inspect(db)}")
-        {reply, state}
-      :error ->
+  defp get_db(db_path) do
+    case :ets.lookup(__MODULE__, db_path) do
+      [{_, db}] ->
+        {:ok, db}
+      [] ->
         open_options = [create_if_missing: true]
         case :rocksdb.open(to_charlist(db_path), open_options) do
           {:ok, db} = reply ->
             Logger.info("Opened #{db_path} #{inspect(db)}")
-            db_cache = Map.put(db_cache, db_path, db)
-            {reply, %{state | db_cache: db_cache}}
+            true = :ets.insert(__MODULE__, [{db_path, db}])
+            reply
           {:error, reason} = reply ->
             Logger.error("Error opening rocksdb #{db_path}: #{inspect(reason)}")
-            {reply, state}
+            reply
         end
     end
+
+    # Logger.error("state: #{inspect(state)}")
+    # db_cache = state.db_cache
+    # case Map.fetch(db_cache, db_path) do
+    #   {:ok, db} = reply ->
+    #     # Logger.info("Using cached handle #{db_path} #{inspect(db)}")
+    #     {reply, state}
+    #   :error ->
+    #     open_options = [create_if_missing: true]
+    #     case :rocksdb.open(to_charlist(db_path), open_options) do
+    #       {:ok, db} = reply ->
+    #         Logger.info("Opened #{db_path} #{inspect(db)}")
+    #         db_cache = Map.put(db_cache, db_path, db)
+    #         {reply, %{state | db_cache: db_cache}}
+    #       {:error, reason} = reply ->
+    #         Logger.error("Error opening rocksdb #{db_path}: #{inspect(reason)}")
+    #         {reply, state}
+    #     end
+    # end
   end
 end
