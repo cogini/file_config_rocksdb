@@ -102,7 +102,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
       # {topen, {:ok, db}} =
       #   :timer.tc(:rocksdb, :open, [to_charlist(db_path), [create_if_missing: true]])
 
-      {:ok, _db} = Server.open(db_path, create_if_missing: true)
+      # {:ok, _db} = Server.open(db_path, create_if_missing: true)
 
       for {path, %{mod: file_mod}} <- Enum.reverse(update.files), update_db?(path, file_mod) do
         Logger.debug("Loading #{name} #{path} #{db_path}")

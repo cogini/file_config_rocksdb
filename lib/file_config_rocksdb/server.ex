@@ -89,7 +89,7 @@ defmodule FileConfigRocksdb.Server do
   end
 
   defp get_db(db_path, state) do
-    Logger.info("state: #{inspect(state)}")
+    Logger.error("state: #{inspect(state)}")
     db_cache = state.db_cache
     case Map.fetch(db_cache, db_path) do
       {:ok, db} = reply ->
@@ -103,7 +103,7 @@ defmodule FileConfigRocksdb.Server do
             db_cache = Map.put(db_cache, db_path, db)
             {reply, %{state | db_cache: db_cache}}
           {:error, reason} = reply ->
-            Logger.debug("Error opening rocksdb #{db_path}: #{inspect(reason)}")
+            Logger.error("Error opening rocksdb #{db_path}: #{inspect(reason)}")
             {reply, state}
         end
     end
