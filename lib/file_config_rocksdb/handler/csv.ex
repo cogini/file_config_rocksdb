@@ -105,7 +105,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
       # {:ok, _db} = Server.open(db_path, create_if_missing: true)
 
       for {path, %{mod: file_mod}} <- Enum.reverse(update.files), update_db?(path, file_mod) do
-        Logger.debug("Loading #{name} #{path} #{db_path}")
+        Logger.debug("Loading #{name} #{path} #{db_path} #{inspect(file_mod)}")
         {time, {:ok, rec}} = :timer.tc(&parse_file/3, [path, db_path, config])
         Logger.info("Loaded #{name} #{path} #{rec} rec #{time / 1_000_000} sec")
         # Record last file load
