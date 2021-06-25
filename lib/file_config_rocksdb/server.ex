@@ -62,7 +62,7 @@ defmodule FileConfigRocksdb.Server do
     # reply = :rocksdb.write(db, batch, options)
 
     {duration, reply} = :timer.tc(:rocksdb, :write, [db, batch, options])
-    duration = Float.floor(duration / 1024) # convert microseconds to milliseconds
+    duration = div(duration, 1024) # convert microseconds to milliseconds
 
     if duration > state.backoff_threshold do
       backoff = state.backoff_multiple * duration
