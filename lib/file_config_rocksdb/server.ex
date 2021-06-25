@@ -93,7 +93,7 @@ defmodule FileConfigRocksdb.Server do
     db_cache = state.db_cache
     case Map.fetch(db_cache, db_path) do
       {:ok, db} = reply ->
-        Logger.info("Using cached handle #{db_path} #{db}")
+        Logger.info("Using cached handle #{db_path} #{inspect(db)}")
         {reply, state}
       :error ->
         open_options = [create_if_missing: true]
