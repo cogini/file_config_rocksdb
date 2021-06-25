@@ -34,8 +34,8 @@ defmodule FileConfigRocksdb.Server do
   def init(args) do
     {:ok, %{
       db_cache: %{},
-      backoff_threshold: args[:backoff_threshold] || 200,
-      backoff_multiple: args[:backoff_multiple] || 10,
+      backoff_threshold: args[:backoff_threshold] || 300,
+      backoff_multiple: args[:backoff_multiple] || 5,
     }}
   end
 
