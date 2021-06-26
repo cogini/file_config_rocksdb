@@ -196,7 +196,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
 
   @spec write_chunk({list(tuple()), non_neg_integer()}, Path.t(), {pos_integer(), pos_integer()}) :: {non_neg_integer(), non_neg_integer()}
   def write_chunk({chunk, index}, db_path, {k, v}) do
-    if rem(index, 10) == 0 do
+    if rem(index + 1, 10) == 0 do
       Logger.info("Writing #{db_path} index #{index}")
     end
     batch = for row <- chunk, do: {:put, Enum.at(row, k - 1), Enum.at(row, v - 1)}
