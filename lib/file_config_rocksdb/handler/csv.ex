@@ -15,7 +15,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
   # @impl true
   @spec lookup(Loader.table_state(), term()) :: term()
   def lookup(%{id: tid, name: name, parser: parser} = state, key) do
-    db_path = state[:db_path] || []
+    db_path = state[:db_path] || ''
     parser_opts = state[:parser_opts] || []
 
     case :ets.lookup(tid, key) do
@@ -134,12 +134,11 @@ defmodule FileConfigRocksdb.Handler.Csv do
     records
     |> Enum.sort()
     |> Enum.chunk_every(state.chunk_size)
-    |> Enum.each(&insert_chunk(&1, state, state.db))
+    |> Enum.each(&insert_chunk(&1, state))
 
-    # Record last updat
+    # Record last update
     :ok = File.touch(status_path(state.db_path))
 
-    # :ok = :rocksdb.close(db)
     true
   end
 
@@ -154,33 +153,19 @@ defmodule FileConfigRocksdb.Handler.Csv do
     db_path <> ".stat"
   end
 
-  # # Determine if update is newer than status file
-  # @spec mod_newer_than_file?(:calendar.datetime(), Path.t()) :: boolean()
-  # defp mod_newer_than_file?(update_mtime, db_path) do
-  #   case File.stat(db_path) do
-  #     {:ok, _dir_stat} ->
-  #       case File.stat(status_path(db_path)) do
-  #         {:ok, %{mtime: file_mtime}} ->
-  #           file_mtime < update_mtime
-  #         {:error, _reason} ->
-  #           true
-  #       end
-  #
-  #     # case File.ls(path) do
-  #     #   {:ok, files} ->
-  #     #     file_times = for file <- files, file_path <- Path.join(path, file),
-  #     #       {:ok, %{mtime: file_mtime}} <- File.stat(file_path), do: file_mtime
-  #     #     Enum.all?(file_times, &(&1 < mod))
-  #     #   {:error, reason} ->
-  #     #     Logger.warning("Error reading path #{path}: #{reason}")
-  #     #     true
-  #     # end
-  #     {:error, :enoent} ->
-  #       true
-  #   end
-  # end
+  # Get modification time of file or Unix epoch on error
+  @spec file_mtime(Path.t()) :: :calendar.datetime()
+  defp file_mtime(path) do
+    case File.stat(path) do
+      {:ok, %{mtime: mtime}} ->
+        mtime
+      {:error, reason} ->
+        Logger.debug("Could not stat file #{path}: #{inspect(reason)}")
+        {{1970, 1, 1}, {0, 0, 0}}
+    end
+  end
 
- #  @spec parse_file(Path.t(), :rocksdb.db_handle(), map()) :: {:ok, non_neg_integer()}
+  # @spec parse_file(Path.t(), :rocksdb.db_handle(), map()) :: {:ok, non_neg_integer()}
   @spec parse_file(Path.t(), Path.t(), map()) :: {:ok, non_neg_integer()}
   defp parse_file(path, db_path, config) do
     chunk_size = config[:chunk_size] || 100
@@ -208,7 +193,6 @@ defmodule FileConfigRocksdb.Handler.Csv do
     Path.join(state_dir, to_string(name))
   end
 
-  # @spec write_chunk(list(tuple()), :rocksdb.db_handle(), {pos_integer(), pos_integer()}) :: {non_neg_integer(), non_neg_integer()}
   @spec write_chunk(list(tuple()), Path.t(), {pos_integer(), pos_integer()}) :: {non_neg_integer(), non_neg_integer()}
   def write_chunk(chunk, db_path, {k, v}) do
     batch = for row <- chunk, do: {:put, Enum.at(row, k - 1), Enum.at(row, v - 1)}
@@ -216,27 +200,13 @@ defmodule FileConfigRocksdb.Handler.Csv do
     {length(batch), duration}
   end
 
-  # @spec insert_chunk(list(tuple()), :ets.tab(), :rocksdb.db_handle()) ::
-  #         {non_neg_integer(), non_neg_integer()}
-  @spec insert_chunk(list(tuple()), :ets.tab(), Path.t()) ::
-          {non_neg_integer(), non_neg_integer()}
-  defp insert_chunk(chunk, tab, db_path) do
+  @spec insert_chunk(list(tuple()), Loader.table_state()) :: {non_neg_integer(), non_neg_integer()}
+  defp insert_chunk(chunk, state) do
     batch = for {key, value} <- chunk, do: {:put, key, value}
-    {duration, :ok} = :timer.tc(Server, :write, [db_path, batch, []])
-    true = :ets.insert(tab, chunk)
+    {duration, :ok} = :timer.tc(Server, :write, [state.db_path, batch, []])
+    true = :ets.insert(state.id, chunk)
 
     {length(batch), duration}
   end
 
-  # Get modification time of file or Unix epoch on error
-  @spec file_mtime(Path.t()) :: :calendar.datetime()
-  defp file_mtime(path) do
-    case File.stat(path) do
-      {:ok, %{mtime: mtime}} ->
-        mtime
-      {:error, reason} ->
-        Logger.debug("Could not stat file #{path}: #{inspect(reason)}")
-        {{1970, 1, 1}, {0, 0, 0}}
-    end
-  end
 end
