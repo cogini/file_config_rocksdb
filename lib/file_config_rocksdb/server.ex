@@ -11,19 +11,19 @@ defmodule FileConfigRocksdb.Server do
 
   def open(db_path, options) do
     {duration, reply} = :timer.tc(:gen_server, :call, [@server, {:open, db_path, options}, @call_timeout])
-    backoff(duration)
+    backoff(duration, options)
     reply
   end
 
   def write(db_path, batch, options) do
     {duration, reply} = :timer.tc(:gen_server, :call, [@server, {:write, db_path, batch, options}, @call_timeout])
-    backoff(duration)
+    backoff(duration, options)
     reply
   end
 
   def get(db_path, key, options) do
     {duration, reply} = :timer.tc(:gen_server, :call, [@server, {:get, db_path, key, options}, @call_timeout])
-    backoff(duration)
+    backoff(duration, options)
     reply
   end
 
@@ -37,13 +37,9 @@ defmodule FileConfigRocksdb.Server do
 
   # gen_server callbacks
 
-  def init(args) do
+  def init(_args) do
     :ets.new(__MODULE__, [:named_table, :public, :set])
-
-    {:ok, %{
-      backoff_threshold: args[:backoff_threshold] || 300,
-      backoff_multiple: args[:backoff_multiple] || 5,
-    }}
+    {:ok, %{}}
   end
 
   def handle_call({:open, db_path, options}, _from, state) do
@@ -118,22 +114,22 @@ defmodule FileConfigRocksdb.Server do
     # end
   end
 
+  @spec backoff(non_neg_integer(), Keyword.t()) :: true
   def backoff(duration, opts \\ []) do
-    threshold = opts[:threshold] || 300
-    multiple = opts[:multiple] || 5
-    max = opts[:max] || 10_000
+    # Duration threshold to trigger backoff (ms)
+    threshold = opts[:backoff_threshold] || 400
+    # Backoff is duration times multiple
+    multiple = opts[:backoff_multiple] || 5
+    # Maximum backoff
+    max = opts[:backoff_max] || 5_000
 
-    duration = div(duration, 1024) # convert microseconds to milliseconds
-    backoff = duration * multiple
-    cond do
-      backoff > max ->
-      Logger.warning("duration #{duration} backoff #{max}")
-        Process.sleep(max)
-      duration > threshold ->
-        Logger.warning("duration #{duration} backoff #{backoff}")
-        Process.sleep(backoff)
-      true ->
-        true
+    # duration is in microseconds, natively, convert to milliseconds
+    duration = div(duration, 1024)
+    if duration > threshold do
+      backoff = min(duration * multiple, max)
+      Logger.warning("duration #{duration} backoff #{backoff}")
+      Process.sleep(max)
     end
+    true
   end
 end
