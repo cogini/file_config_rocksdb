@@ -48,11 +48,9 @@ defmodule FileConfigRocksdb.Handler.Csv do
             :undefined
 
           error ->
-            Logger.warning("Error reading from rocksdb #{name} #{key}: #{inspect(error)}")
+            Logger.warning("Error reading rocksdb #{name} #{key}: #{inspect(error)}")
             :undefined
         end
-
-        # TODO: somehow reuse db handle
 
         # case Server.open(db_path, create_if_missing: true) do
         #   {:ok, _db} ->
@@ -98,24 +96,20 @@ defmodule FileConfigRocksdb.Handler.Csv do
     chunk_size = config[:chunk_size] || 100
     Logger.debug("#{name} #{db_path} #{inspect(update)}")
 
-    if update_db?(db_path, update.mod) do
-      # {topen, {:ok, db}} =
-      #   :timer.tc(:rocksdb, :open, [to_charlist(db_path), [create_if_missing: true]])
+    status_path = status_path(db_path)
+    status_mod = file_mtime(status_path)
+    Logger.debug("Status file #{status_path} #{inspect(status_mod)}")
 
-      # {:ok, _db} = Server.open(db_path, create_if_missing: true)
-
-      for {path, %{mod: file_mod}} <- Enum.reverse(update.files), update_db?(path, file_mod) do
-        Logger.debug("Loading #{name} #{path} #{db_path} #{inspect(file_mod)}")
+    if update.mod > status_mod do
+      # Sort files from oldest to newest
+      files = Enum.sort(update.files, &(&1.mod <= &2.mod))
+      for {path, %{mod: file_mod}} <- files, file_mod > status_mod do
+        Logger.debug("Loading #{name} #{path} #{inspect(file_mod)}")
         {time, {:ok, rec}} = :timer.tc(&parse_file/3, [path, db_path, config])
         Logger.info("Loaded #{name} #{path} #{rec} rec #{time / 1_000_000} sec")
-        # Record last file load
-        :ok = File.touch(status_path(db_path), file_mod)
+        # Record last successful file load
+        :ok = File.touch(status_path, file_mod)
       end
-
-      # :ok = :rocksdb.close(db)
-      # {tclose, :ok} = :timer.tc(:rocksdb, :close, [db])
-
-      # Logger.debug("Loaded #{name} open #{topen / 1_000_000}, close #{ tclose / 1_000_000}")
     else
       Logger.info("Loaded #{name} #{db_path} up to date")
     end
@@ -136,9 +130,6 @@ defmodule FileConfigRocksdb.Handler.Csv do
   # @impl true
   @spec insert_records(Loader.table_state(), {term(), term()} | [{term(), term()}]) :: true
   def insert_records(state, records) when is_list(records) do
-    # {:ok, db} = :rocksdb.open(state.db_path, create_if_missing: false)
-    # {:ok, db} = :rocksdb.open(state.db_path, create_if_missing: true)
-
     records
     |> Enum.sort()
     |> Enum.chunk_every(state.chunk_size)
@@ -156,36 +147,37 @@ defmodule FileConfigRocksdb.Handler.Csv do
   # Internal functions
 
   # This file keeps track of the last update to the db
+  @spec status_path(Path.t()) :: Path.t()
   defp status_path(db_path) do
     # Path.join(db_path, "CURRENT")
     db_path <> ".stat"
   end
 
-  # Determine if update is newer than db
-  @spec update_db?(Path.t(), :calendar.datetime()) :: boolean()
-  defp update_db?(db_path, update_mtime) do
-    case File.stat(db_path) do
-      {:ok, _dir_stat} ->
-        case File.stat(status_path(db_path)) do
-          {:ok, %{mtime: file_mtime}} ->
-            file_mtime < update_mtime
-          {:error, _reason} ->
-            true
-        end
-
-      # case File.ls(path) do
-      #   {:ok, files} ->
-      #     file_times = for file <- files, file_path <- Path.join(path, file),
-      #       {:ok, %{mtime: file_mtime}} <- File.stat(file_path), do: file_mtime
-      #     Enum.all?(file_times, &(&1 < mod))
-      #   {:error, reason} ->
-      #     Logger.warning("Error reading path #{path}: #{reason}")
-      #     true
-      # end
-      {:error, :enoent} ->
-        true
-    end
-  end
+  # # Determine if update is newer than status file
+  # @spec mod_newer_than_file?(:calendar.datetime(), Path.t()) :: boolean()
+  # defp mod_newer_than_file?(update_mtime, db_path) do
+  #   case File.stat(db_path) do
+  #     {:ok, _dir_stat} ->
+  #       case File.stat(status_path(db_path)) do
+  #         {:ok, %{mtime: file_mtime}} ->
+  #           file_mtime < update_mtime
+  #         {:error, _reason} ->
+  #           true
+  #       end
+  #
+  #     # case File.ls(path) do
+  #     #   {:ok, files} ->
+  #     #     file_times = for file <- files, file_path <- Path.join(path, file),
+  #     #       {:ok, %{mtime: file_mtime}} <- File.stat(file_path), do: file_mtime
+  #     #     Enum.all?(file_times, &(&1 < mod))
+  #     #   {:error, reason} ->
+  #     #     Logger.warning("Error reading path #{path}: #{reason}")
+  #     #     true
+  #     # end
+  #     {:error, :enoent} ->
+  #       true
+  #   end
+  # end
 
  #  @spec parse_file(Path.t(), :rocksdb.db_handle(), map()) :: {:ok, non_neg_integer()}
   @spec parse_file(Path.t(), Path.t(), map()) :: {:ok, non_neg_integer()}
@@ -204,8 +196,6 @@ defmodule FileConfigRocksdb.Handler.Csv do
     results = Enum.to_list(stream)
     # tprocess = :timer.now_diff(:os.timestamp(), start_time) / 1_000_000
 
-    # Logger.warning("results: #{inspect results}")
-
     rec = Enum.reduce(results, 0, fn {count, _duration}, acc -> acc + count end)
     {:ok, rec}
   end
@@ -221,9 +211,6 @@ defmodule FileConfigRocksdb.Handler.Csv do
   @spec write_chunk(list(tuple()), Path.t(), {pos_integer(), pos_integer()}) :: {non_neg_integer(), non_neg_integer()}
   def write_chunk(chunk, db_path, {k, v}) do
     batch = for row <- chunk, do: {:put, Enum.at(row, k - 1), Enum.at(row, v - 1)}
-    # Logger.warning("batch: #{inspect(batch)}")
-    # :ok = :rocksdb.write(db, batch, sync: true)
-    # {duration, :ok} = :timer.tc(:rocksdb, :write, [db, batch, []])
     {duration, :ok} = :timer.tc(Server, :write, [db_path, batch, []])
     {length(batch), duration}
   end
@@ -238,5 +225,17 @@ defmodule FileConfigRocksdb.Handler.Csv do
     true = :ets.insert(tab, chunk)
 
     {length(batch), duration}
+  end
+
+  # Get modification time of file or Unix epoch on error
+  @spec file_mtime(Path.t()) :: :calendar.datetime()
+  defp file_mtime(path) do
+    case File.stat(path) do
+      {:ok, %{mtime: mtime}} ->
+        mtime
+      {:error, reason} ->
+        Logger.debug("Could not stat file #{path}: #{inspect(reason)}")
+        {{1970, 1, 1}, {0, 0, 0}}
+    end
   end
 end
