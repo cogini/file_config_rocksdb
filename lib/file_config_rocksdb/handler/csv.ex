@@ -102,7 +102,8 @@ defmodule FileConfigRocksdb.Handler.Csv do
 
     if update.mod > status_mod do
       # Sort files from oldest to newest
-      files = Enum.sort(update.files, &(&1.mod <= &2.mod))
+      files = Enum.sort(update.files, fn({_, %{mod: a}}, {_, %{mod: b}}) -> a <= b end)
+
       for {path, %{mod: file_mod}} <- files, file_mod > status_mod do
         Logger.debug("Loading #{name} #{path} #{inspect(file_mod)}")
         {time, {:ok, rec}} = :timer.tc(&parse_file/3, [path, db_path, config])
