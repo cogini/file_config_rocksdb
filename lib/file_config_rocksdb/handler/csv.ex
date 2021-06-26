@@ -176,6 +176,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
       |> File.stream!(read_ahead: 100_000)
       |> Parser.parse_stream(skip_headers: false)
       |> Stream.chunk_every(chunk_size)
+      |> Stream.with_index()
       |> Stream.map(&write_chunk(&1, db_path, csv_fields))
 
     # start_time = :os.timestamp()
@@ -193,8 +194,11 @@ defmodule FileConfigRocksdb.Handler.Csv do
     Path.join(state_dir, to_string(name))
   end
 
-  @spec write_chunk(list(tuple()), Path.t(), {pos_integer(), pos_integer()}) :: {non_neg_integer(), non_neg_integer()}
-  def write_chunk(chunk, db_path, {k, v}) do
+  @spec write_chunk({list(tuple()), non_neg_integer()}, Path.t(), {pos_integer(), pos_integer()}) :: {non_neg_integer(), non_neg_integer()}
+  def write_chunk({chunk, index}, db_path, {k, v}) do
+    if rem(index, 10) == 0 do
+      Logger.info("Writing #{db_path} index #{index}")
+    end
     batch = for row <- chunk, do: {:put, Enum.at(row, k - 1), Enum.at(row, v - 1)}
     {duration, :ok} = :timer.tc(Server, :write, [db_path, batch, []])
     {length(batch), duration}
