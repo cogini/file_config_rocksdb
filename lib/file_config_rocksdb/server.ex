@@ -22,8 +22,8 @@ defmodule FileConfigRocksdb.Server do
   end
 
   def get(db_path, key, options) do
-    {duration, reply} = :timer.tc(:gen_server, :call, [@server, {:get, db_path, key, options}, @call_timeout])
-    backoff(duration, options)
+    {_duration, reply} = :timer.tc(:gen_server, :call, [@server, {:get, db_path, key, options}, @call_timeout])
+    # backoff(duration, options)
     reply
   end
 
