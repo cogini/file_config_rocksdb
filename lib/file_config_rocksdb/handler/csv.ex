@@ -111,6 +111,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
         # Record last successful file load
         :ok = File.touch(status_path, file_mod)
       end
+      Logger.info("Loaded #{name} #{db_path} complete")
     else
       Logger.info("Loaded #{name} #{db_path} up to date")
     end
