@@ -28,13 +28,14 @@ defmodule FileConfigRocksdb.MixProject do
         "coveralls.detail": :test,
         "coveralls.post": :test,
         "coveralls.html": :test
-      ]
+      ],
       # xref: [
       #   exclude: [EEx, :cover]
-      # ]
+      # ],
     ]
   end
 
+  # Run "mix help compile.app" to learn about applications.
   def application do
     [
       extra_applications: [:logger],
@@ -49,7 +50,7 @@ defmodule FileConfigRocksdb.MixProject do
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.23", only: :dev, runtime: false},
       {:excoveralls, "~> 0.14.0", only: [:dev, :test], runtime: false},
-      {:nimble_csv, "~> 0.3"},
+      {:nimble_csv, "~> 1.1"},
       # {:rocksdb, git: "https://gitlab.com/barrel-db/erlang-rocksdb.git"},
       {:rocksdb, "~> 1.6"},
     ]
