@@ -94,11 +94,11 @@ defmodule FileConfigRocksdb.Handler.Csv do
     db_path = db_path(name)
     config = update.config
     chunk_size = config[:chunk_size] || 100
-    Logger.debug("#{name} #{db_path} #{inspect(update)}")
+    # Logger.debug("#{name} #{db_path} #{inspect(update)}")
 
     status_path = status_path(db_path)
     status_mod = file_mtime(status_path)
-    Logger.debug("Status file #{status_path} #{inspect(status_mod)}")
+    # Logger.debug("Status file #{status_path} #{inspect(status_mod)}")
 
     if update.mod > status_mod do
       # Sort files from oldest to newest
