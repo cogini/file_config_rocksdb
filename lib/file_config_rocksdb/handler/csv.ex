@@ -12,7 +12,6 @@ defmodule FileConfigRocksdb.Handler.Csv do
 
   alias FileConfigRocksdb.Server
 
-  # @impl true
   @spec lookup(Loader.table_state(), term()) :: term()
   def lookup(%{id: tid, name: name, parser: parser} = state, key) do
     db_path = state[:db_path] || ''
@@ -88,10 +87,10 @@ defmodule FileConfigRocksdb.Handler.Csv do
     end
   end
 
-  # @impl true
-  @spec load_update(Loader.name(), Loader.update(), :ets.tid()) :: Loader.table_state()
-  def load_update(name, update, tid) do
+  @spec load_update(Loader.name(), Loader.update(), :ets.tid(), Loader.update()) :: Loader.table_state()
+  def load_update(name, update, tid, _prev) do
     db_path = db_path(name)
+
     config = update.config
     chunk_size = config[:chunk_size] || 100
     # Logger.debug("#{name} #{db_path} #{inspect(update)}")
@@ -100,10 +99,15 @@ defmodule FileConfigRocksdb.Handler.Csv do
     status_mod = file_mtime(status_path)
     # Logger.debug("Status file #{status_path} #{inspect(status_mod)}")
 
-    if update.mod > status_mod do
-      # Sort files from oldest to newest
-      files = Enum.sort(update.files, fn({_, %{mod: a}}, {_, %{mod: b}}) -> a <= b end)
+    files =
+      update
+      |> Loader.changed_files?(prev)
+      |> Loader.latest_file?()
+      # Files stored latest first, process in chronological order
+      |> Enum.reverse()
+      # files = Enum.sort(update.files, fn({_, %{mod: a}}, {_, %{mod: b}}) -> a <= b end)
 
+    if update.mod > status_mod do
       for {path, %{mod: file_mod}} <- files, file_mod > status_mod do
         Logger.info("Loading #{name} #{path} #{inspect(file_mod)}")
         {time, {:ok, rec}} = :timer.tc(&parse_file/3, [path, db_path, config])
@@ -129,7 +133,6 @@ defmodule FileConfigRocksdb.Handler.Csv do
     )
   end
 
-  # @impl true
   @spec insert_records(Loader.table_state(), {term(), term()} | [{term(), term()}]) :: true
   def insert_records(state, records) when is_list(records) do
     records
