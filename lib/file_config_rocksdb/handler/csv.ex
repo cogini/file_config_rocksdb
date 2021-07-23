@@ -120,17 +120,8 @@ defmodule FileConfigRocksdb.Handler.Csv do
       Logger.info("Loaded #{name} #{db_path} up to date")
     end
 
-    Map.merge(
-      %{
-        name: name,
-        id: tid,
-        mod: update.mod,
-        handler: __MODULE__,
-        db_path: to_charlist(db_path),
-        chunk_size: chunk_size
-      },
-      Map.take(config, [:parser, :parser_opts, :commit_cycle])
-    )
+    table_state = Loader.make_table_state(name, update, tid)
+    Map.merge(table_state, %{db_path: to_charlist(db_path), chunk_size: chunk_size})
   end
 
   @spec insert_records(Loader.table_state(), {term(), term()} | [{term(), term()}]) :: true
