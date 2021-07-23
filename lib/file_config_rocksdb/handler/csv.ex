@@ -88,7 +88,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
   end
 
   @spec load_update(Loader.name(), Loader.update(), :ets.tid(), Loader.update()) :: Loader.table_state()
-  def load_update(name, update, tid, _prev) do
+  def load_update(name, update, tid, prev) do
     db_path = db_path(name)
 
     config = update.config
