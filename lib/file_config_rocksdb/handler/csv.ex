@@ -120,7 +120,7 @@ defmodule FileConfigRocksdb.Handler.Csv do
       Logger.info("Loaded #{name} #{db_path} up to date")
     end
 
-    table_state = Loader.make_table_state(name, update, tid)
+    table_state = Loader.make_table_state(__MODULE__, name, update, tid)
     Map.merge(table_state, %{db_path: to_charlist(db_path), chunk_size: chunk_size})
   end
 
