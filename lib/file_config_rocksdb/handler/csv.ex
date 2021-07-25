@@ -1,21 +1,22 @@
 defmodule FileConfigRocksdb.Handler.Csv do
   @moduledoc "Handler for CSV files with RocksDB backend"
-  @app :file_config_rocksdb
-
-  NimbleCSV.define(FileConfigRocksdb.Handler.Csv.Parser, separator: "\t", escape: "\0")
-  alias FileConfigRocksdb.Handler.Csv.Parser
 
   require Logger
 
   alias FileConfig.Loader
   # alias FileConfig.Lib
 
+  NimbleCSV.define(FileConfigRocksdb.Handler.Csv.Parser, separator: "\t", escape: "\0")
+  alias FileConfigRocksdb.Handler.Csv.Parser
+
   alias FileConfigRocksdb.Server
+
+  @app :file_config_rocksdb
 
   @spec lookup(Loader.table_state(), term()) :: term()
   def lookup(%{id: tid, name: name, parser: parser} = state, key) do
-    db_path = state[:db_path] || ''
     parser_opts = state[:parser_opts] || []
+    db_path = state[:db_path] || ''
 
     case :ets.lookup(tid, key) do
       [{_key, :undefined}] ->
@@ -148,12 +149,13 @@ defmodule FileConfigRocksdb.Handler.Csv do
     db_path <> ".stat"
   end
 
-  # Get modification time of file or Unix epoch on error
+  # Get modification time of file, or Unix epoch on error
   @spec file_mtime(Path.t()) :: :calendar.datetime()
   defp file_mtime(path) do
     case File.stat(path) do
       {:ok, %{mtime: mtime}} ->
         mtime
+
       {:error, reason} ->
         Logger.debug("Could not stat file #{path}: #{inspect(reason)}")
         {{1970, 1, 1}, {0, 0, 0}}
