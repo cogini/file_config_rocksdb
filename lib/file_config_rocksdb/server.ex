@@ -37,21 +37,29 @@ defmodule FileConfigRocksdb.Server do
 
   # gen_server callbacks
 
+  @impl true
   def init(_args) do
+    # Process.flag(:trap_exit, true)
+
     :ets.new(__MODULE__, [:named_table, :public, :set])
+
     {:ok, %{}}
   end
 
+  @impl true
   def handle_call({:open, db_path, options}, _from, state) do
     {reply, new_state} =
       case Map.fetch(state, db_path) do
         {:ok, _value} = reply ->
           {reply, state}
+
         :error ->
           Logger.warning("open #{db_path}")
+
           case :rocksdb.open(to_charlist(db_path), options) do
             {:ok, db} = reply ->
               {reply, Map.put(state, db_path, db)}
+
             {:error, reason} = reply ->
               Logger.debug("Error opening rocksdb #{db_path}: #{inspect(reason)}")
               {reply, state}
@@ -77,17 +85,25 @@ defmodule FileConfigRocksdb.Server do
     {:reply, :ok, state}
   end
 
+  @impl true
+  def terminate(reason, _state) do
+    Logger.info("terminating #{inspect(reason)}")
+  end
+
   defp get_db(db_path) do
     case :ets.lookup(__MODULE__, db_path) do
       [{_, db}] ->
         {:ok, db}
+
       [] ->
         open_options = [create_if_missing: true]
         case :rocksdb.open(to_charlist(db_path), open_options) do
           {:ok, db} = reply ->
             Logger.info("Opened #{db_path} #{inspect(db)}")
+
             true = :ets.insert(__MODULE__, [{db_path, db}])
             reply
+
           {:error, reason} = reply ->
             Logger.error("Error opening rocksdb #{db_path}: #{inspect(reason)}")
             reply
@@ -130,6 +146,7 @@ defmodule FileConfigRocksdb.Server do
       Logger.warning("duration #{duration} backoff #{backoff}")
       Process.sleep(max)
     end
+
     true
   end
 end
